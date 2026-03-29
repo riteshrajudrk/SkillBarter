@@ -34,6 +34,14 @@ app.get("/api/v1/health", (_req, res) => {
   res.json({ ok: true, name: "SkillBarter API" });
 });
 
+app.get("/", (_req, res) => {
+  res.json({
+    ok: true,
+    message: "SkillBarter API is running",
+    health: "/api/v1/health"
+  });
+});
+
 app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1/users", userRoutes);
 app.use("/api/v1/swaps", swapRoutes);
@@ -44,3 +52,4 @@ app.use(notFound);
 app.use(errorHandler);
 
 export default app;
+
