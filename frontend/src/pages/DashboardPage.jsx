@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import RequestCard from "../components/cards/RequestCard.jsx";
 import api from "../services/api.js";
+import { getSocket } from "../services/socket.js";
 
 const emptyDashboard = {
   stats: {
@@ -21,7 +22,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
-  const loadDashboard = async () => {
+  const loadDashboard = useCallback(async () => {
     setLoading(true);
 
     try {
@@ -32,11 +33,31 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadDashboard();
-  }, []);
+  }, [loadDashboard]);
+
+  useEffect(() => {
+    const socket = getSocket();
+
+    if (!socket) {
+      return undefined;
+    }
+
+    const handleSwapChange = () => {
+      loadDashboard();
+    };
+
+    socket.on("swap:created", handleSwapChange);
+    socket.on("swap:updated", handleSwapChange);
+
+    return () => {
+      socket.off("swap:created", handleSwapChange);
+      socket.off("swap:updated", handleSwapChange);
+    };
+  }, [loadDashboard]);
 
   const handleRequestAction = async (requestId, status) => {
     try {

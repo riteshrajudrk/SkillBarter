@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import api from "../services/api.js";
+import { disconnectSocket } from "../services/socket.js";
 
 const savedUser = localStorage.getItem("skillbarter-user");
 const savedToken = localStorage.getItem("skillbarter-token");
@@ -33,6 +34,7 @@ export const useAuthStore = create((set) => ({
   },
   logout: () => {
     clearAuthData();
+    disconnectSocket();
     set({ user: null, token: null, initialized: true });
   },
   fetchMe: async () => {

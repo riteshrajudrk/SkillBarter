@@ -1,4 +1,5 @@
 import SwapRequest from "../models/SwapRequest.js";
+import { getIO } from "../socket/index.js";
 
 export const createSwapRequest = async (req, res) => {
   const { receiverId, skillOffered, skillRequested, message } = req.body;
@@ -31,6 +32,16 @@ export const createSwapRequest = async (req, res) => {
     message: message || "",
     status: "pending"
   });
+
+  await swapRequest.populate("senderId", "name bio skillsOffered skillsWanted");
+  await swapRequest.populate("receiverId", "name bio skillsOffered skillsWanted");
+
+  const io = getIO();
+
+  if (io) {
+    io.to(String(swapRequest.senderId._id)).emit("swap:created", swapRequest);
+    io.to(String(swapRequest.receiverId._id)).emit("swap:created", swapRequest);
+  }
 
   res.status(201).json(swapRequest);
 };
@@ -73,6 +84,13 @@ export const updateSwapStatus = async (req, res) => {
 
   await swapRequest.populate("senderId", "name bio skillsOffered skillsWanted");
   await swapRequest.populate("receiverId", "name bio skillsOffered skillsWanted");
+
+  const io = getIO();
+
+  if (io) {
+    io.to(String(swapRequest.senderId._id)).emit("swap:updated", swapRequest);
+    io.to(String(swapRequest.receiverId._id)).emit("swap:updated", swapRequest);
+  }
 
   res.json(swapRequest);
 };

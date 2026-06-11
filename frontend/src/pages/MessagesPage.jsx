@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import api from "../services/api.js";
+import { getSocket } from "../services/socket.js";
 
 export default function MessagesPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -17,7 +18,7 @@ export default function MessagesPage() {
     return contacts.find((contact) => String(contact._id) === String(selectedUserId));
   }, [contacts, selectedUserId]);
 
-  const loadContacts = async () => {
+  const loadContacts = useCallback(async () => {
     setLoadingContacts(true);
 
     try {
@@ -28,9 +29,9 @@ export default function MessagesPage() {
     } finally {
       setLoadingContacts(false);
     }
-  };
+  }, []);
 
-  const loadMessages = async (partnerId) => {
+  const loadMessages = useCallback(async (partnerId) => {
     if (!partnerId) {
       setMessages([]);
       return;
@@ -48,17 +49,87 @@ export default function MessagesPage() {
     } finally {
       setLoadingMessages(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadContacts();
-  }, []);
+  }, [loadContacts]);
 
   useEffect(() => {
     if (selectedUserId) {
       loadMessages(selectedUserId);
     }
+  }, [loadMessages, selectedUserId]);
+
+  useEffect(() => {
+    const socket = getSocket();
+
+    if (!socket) {
+      return undefined;
+    }
+
+    const handleMessage = (message) => {
+      const isSelectedConversation =
+        String(message.sender) === String(selectedUserId) ||
+        String(message.receiver) === String(selectedUserId);
+
+      if (!isSelectedConversation) {
+        return;
+      }
+
+      setMessages((currentMessages) => {
+        if (currentMessages.some((currentMessage) => currentMessage._id === message._id)) {
+          return currentMessages;
+        }
+
+        return [...currentMessages, message];
+      });
+
+      if (String(message.sender) === String(selectedUserId)) {
+        api.patch(`/messages/${selectedUserId}/read`).catch(() => {});
+      }
+    };
+
+    socket.on("chat:message", handleMessage);
+
+    return () => {
+      socket.off("chat:message", handleMessage);
+    };
   }, [selectedUserId]);
+
+  useEffect(() => {
+    const socket = getSocket();
+
+    if (!socket || !selectedUserId) {
+      return undefined;
+    }
+
+    socket.emit("chat:join", { partnerId: selectedUserId });
+
+    return undefined;
+  }, [selectedUserId]);
+
+  useEffect(() => {
+    const socket = getSocket();
+
+    if (!socket) {
+      return undefined;
+    }
+
+    const handleSwapChange = (swapRequest) => {
+      if (["accepted", "completed"].includes(swapRequest.status)) {
+        loadContacts();
+      }
+    };
+
+    socket.on("swap:created", handleSwapChange);
+    socket.on("swap:updated", handleSwapChange);
+
+    return () => {
+      socket.off("swap:created", handleSwapChange);
+      socket.off("swap:updated", handleSwapChange);
+    };
+  }, [loadContacts]);
 
   const openConversation = (contact) => {
     setFeedback("");
@@ -76,7 +147,12 @@ export default function MessagesPage() {
         message: draft
       });
 
-      setMessages((currentMessages) => [...currentMessages, response.data]);
+      const socket = getSocket();
+
+      if (!socket?.connected) {
+        setMessages((currentMessages) => [...currentMessages, response.data]);
+      }
+
       setDraft("");
     } catch (requestError) {
       setFeedback(requestError.response?.data?.message || "Could not send message.");

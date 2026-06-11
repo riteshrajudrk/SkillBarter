@@ -1,5 +1,6 @@
 import Message from "../models/Message.js";
 import SwapRequest from "../models/SwapRequest.js";
+import { getIO } from "../socket/index.js";
 
 const conversationIdFor = (userId, partnerId) =>
   [String(userId), String(partnerId)].sort().join(":");
@@ -74,6 +75,13 @@ export const sendMessage = async (req, res) => {
     receiver,
     message
   });
+
+  const io = getIO();
+
+  if (io) {
+    io.to(conversationId).emit("chat:message", savedMessage);
+    io.to(String(receiver)).emit("chat:message", savedMessage);
+  }
 
   res.status(201).json(savedMessage);
 };

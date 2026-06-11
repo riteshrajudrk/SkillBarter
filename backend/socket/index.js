@@ -2,12 +2,17 @@ import { Server } from "socket.io";
 import jwt from "jsonwebtoken";
 import env from "../config/env.js";
 import Message from "../models/Message.js";
+import SwapRequest from "../models/SwapRequest.js";
+
+let io;
 
 const conversationIdFor = (userId, partnerId) =>
   [String(userId), String(partnerId)].sort().join(":");
 
+export const getIO = () => io;
+
 export const initializeSocket = (server) => {
-  const io = new Server(server, {
+  io = new Server(server, {
     cors: {
       origin: env.clientUrl,
       credentials: true
@@ -40,6 +45,21 @@ export const initializeSocket = (server) => {
     });
 
     socket.on("chat:send", async ({ receiver, message }) => {
+      const acceptedSwap = await SwapRequest.findOne({
+        $or: [
+          { senderId: socket.userId, receiverId: receiver },
+          { senderId: receiver, receiverId: socket.userId }
+        ],
+        status: { $in: ["accepted", "completed"] }
+      });
+
+      if (!acceptedSwap) {
+        socket.emit("chat:error", {
+          message: "You can only message users with accepted swap requests"
+        });
+        return;
+      }
+
       const conversationId = conversationIdFor(socket.userId, receiver);
       const savedMessage = await Message.create({
         conversationId,
